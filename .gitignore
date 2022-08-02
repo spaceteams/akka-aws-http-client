@@ -1,0 +1,9 @@
+.idea
+.metals
+.bloop
+.vscode
+/.bsp/
+target/
+
+.direnv
+.envrc
