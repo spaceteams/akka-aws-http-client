@@ -21,6 +21,15 @@ ThisBuild / scmInfo := Some(
   )
 )
 
+ThisBuild / developers := List(
+  Developer(
+    "kampka",
+    "Christian Kampka",
+    "christian.kampka@spaceteams.de",
+    url("https://www.spaceteams.de")
+  )
+)
+
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
 ThisBuild / sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
 
