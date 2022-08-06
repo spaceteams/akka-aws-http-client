@@ -12,7 +12,7 @@ ThisBuild / licenses := Seq(
 ThisBuild / homepage := Some(
   url("http://github.com/spaceteams/akka-aws-http-client")
 )
-ThisBuild / description := "An slf4j scala backend for cloud native environments"
+ThisBuild / description := "An Akka HTTP based backend client for the AWS Java SDK v2"
 ThisBuild / scmInfo := Some(
   ScmInfo(
     url("http://github.com/spaceteams/akka-aws-http-client"),
@@ -85,6 +85,7 @@ val AkkaHttpVersion = "10.2.9"
 lazy val root = (project in file("."))
   .settings(commonSettings)
   .settings(
+    name := "akka-aws-http-client",
     moduleName := "akka-aws-http-client",
     libraryDependencies ++= Seq(
       "software.amazon.awssdk" % "sdk-core" % AmazonSdkVersion % Provided,
