@@ -1,6 +1,6 @@
 # An Akka HTTP based backend client for the AWS Java SDK v2
 
-This package contains an alternateve implementation for the Async HTTP Client provided by the AWS Java SDK v2.
+This package contains an alternative implementation for the Async HTTP Client provided by the AWS Java SDK v2.
 It utilizes non-blocking IO based on the Akka HTTP stack, offering a replacement to the built-in Netty HTTP stack.
 
 It supports Scala 2.13+ and Scala 3.1+
