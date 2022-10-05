@@ -162,7 +162,16 @@ object AkkaAwsHttpClient {
       )
       .statusCode(response.status.intValue())
       .statusText(response.status.reason)
-      .build
+
+    response.entity
+      .getContentLengthOption()
+      .toScala
+      .foreach(cl => resp.appendHeader(`Content-Length`.name, cl.toString()))
+
+    resp.appendHeader(
+      `Content-Type`.name,
+      response.entity.getContentType().toString()
+    )
 
     val (done, content) =
       response.entity.dataBytes
@@ -171,7 +180,7 @@ object AkkaAwsHttpClient {
         .toMat(Sink.asPublisher(fanout = false))(Keep.both)
         .run()
 
-    handler.onHeaders(resp)
+    handler.onHeaders(resp.build())
     handler.onStream(content)
 
     done.map(_ => ())
