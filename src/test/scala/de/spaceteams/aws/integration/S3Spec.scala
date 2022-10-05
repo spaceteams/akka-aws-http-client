@@ -1,4 +1,5 @@
 package de.spaceteams.aws.integration
+import akka.http.scaladsl.model.MediaTypes._
 import de.spaceteams.aws.AwsClientSpec
 import org.scalatest.compatible.Assertion
 import org.testcontainers.containers.localstack.LocalStackContainer.Service.S3
@@ -56,7 +57,15 @@ class S3Spec extends AwsClientSpec[S3AsyncClient, S3AsyncClientBuilder] {
         val data = UUID.randomUUID().toString()
 
         val put =
-          PutObjectRequest.builder().bucket(bucketName).key("my-key").build()
+          PutObjectRequest
+            .builder()
+            .bucket(bucketName)
+            .key("my-key")
+            .contentType(
+              (`multipart/mixed` withBoundary ("ABC"))
+                .toString()
+            )
+            .build()
         (for {
           _ <- client
             .putObject(put, AsyncRequestBody.fromString(data))
@@ -68,9 +77,14 @@ class S3Spec extends AwsClientSpec[S3AsyncClient, S3AsyncClientBuilder] {
             .build()
           transformer = AsyncResponseTransformer.toBytes[GetObjectResponse]()
           response <- client.getObject(get, transformer).asScala
-        } yield response) map (response =>
+        } yield response) map { response =>
+          response.response().contentLength() should equal(data.length())
+          response.response().contentType() should equal(
+            "multipart/mixed; boundary=ABC"
+          )
+
           response.asUtf8String() should equal(data)
-        )
+        }
       }
     }
 
