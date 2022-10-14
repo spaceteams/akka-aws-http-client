@@ -95,6 +95,7 @@ lazy val root = (project in file("."))
       "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion % Provided,
       "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.40.10" % Test,
       "com.dimafeng" %% "testcontainers-scala-localstack-v2" % "0.40.10" % Test,
-      "com.amazonaws" % "aws-java-sdk-core" % "1.11.959" % Test // v1 SDK version for localstack
+      "com.amazonaws" % "aws-java-sdk-core" % "1.11.959" % Test, // v1 SDK version for localstack
+      "org.slf4j" % "slf4j-simple" % "2.0.3" % Test
     ) ++ amazonSdkTestLibs
   )

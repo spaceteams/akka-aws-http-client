@@ -7,6 +7,10 @@ All notable changes to this project will be documented in this file.
  - Add optional Akka HttpExt parameter to client constructor, allowing
    the usage of a specific instance over the one associated with the current actor system.
 
+### Changed
+
+ - Add slf4j simple logger configuration for tests 
+
 ## [1.1.0]
 ### Changed
 
