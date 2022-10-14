@@ -2,6 +2,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### New
+
+ - Add optional Akka HttpExt parameter to client constructor, allowing
+   the usage of a specific instance over the one associated with the current actor system.
 
 ## [1.1.0]
 ### Changed

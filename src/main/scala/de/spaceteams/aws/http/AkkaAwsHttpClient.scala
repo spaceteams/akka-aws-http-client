@@ -2,6 +2,7 @@ package de.spaceteams.aws.http
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.HttpExt
 import akka.http.scaladsl.model.ContentType
 import akka.http.scaladsl.model.ContentTypes
 import akka.http.scaladsl.model.HttpEntity
@@ -36,17 +37,18 @@ import scala.util.Success
 import scala.util.Try
 
 class AkkaAwsHttpClient(
-    connectionPoolSettings: Option[ConnectionPoolSettings] = None
+    connectionPoolSettings: Option[ConnectionPoolSettings] = None,
+    http: Option[HttpExt] = None
 )(implicit actorSystem: ActorSystem, executionContext: ExecutionContext)
     extends SdkAsyncHttpClient {
 
   import AkkaAwsHttpClient._
 
-  private val http = Http()
+  private val httpClient = http.getOrElse(Http())
   private def httpRequest(request: HttpRequest): Future[HttpResponse] =
     connectionPoolSettings
-      .map(settings => http.singleRequest(request, settings = settings))
-      .getOrElse(http.singleRequest(request))
+      .map(settings => httpClient.singleRequest(request, settings = settings))
+      .getOrElse(httpClient.singleRequest(request))
 
   override val clientName = "AkkaAwsHttpClient"
 
@@ -188,9 +190,10 @@ object AkkaAwsHttpClient {
   }
 
   def apply(
-      connectionPoolSettings: Option[ConnectionPoolSettings] = None
+      connectionPoolSettings: Option[ConnectionPoolSettings] = None,
+      http: Option[HttpExt] = None
   )(implicit actorSystem: ActorSystem): AkkaAwsHttpClient = {
     implicit val ec = actorSystem.dispatcher
-    new AkkaAwsHttpClient(connectionPoolSettings)
+    new AkkaAwsHttpClient(connectionPoolSettings, http)
   }
 }

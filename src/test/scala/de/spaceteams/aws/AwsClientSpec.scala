@@ -1,5 +1,6 @@
 package de.spaceteams.aws
 import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
 import com.dimafeng.testcontainers.LocalStackV2Container
 import de.spaceteams.aws.http.AkkaAwsHttpClient
 import org.scalatest.FutureOutcome
@@ -30,7 +31,8 @@ trait AwsClientSpec[CLIENT <: SdkClient, BUILDER <: AwsAsyncClientBuilder[
   override def withFixture(test: OneArgAsyncTest): FutureOutcome = {
     require(enabledServices.contains(service))
     implicit val actorSystem = ActorSystem()
-    val client = AkkaAwsHttpClient(None)
+    val http = Http()
+    val client = AkkaAwsHttpClient(None, Some(http))
     val awsClient = clientBuilder
       .httpClient(client)
       .endpointOverride(container.endpointOverride(service))
@@ -42,6 +44,7 @@ trait AwsClientSpec[CLIENT <: SdkClient, BUILDER <: AwsAsyncClientBuilder[
       super.withFixture(test.toNoArgAsyncTest(awsClient))
     } lastly {
       awsClient.close()
+      http.shutdownAllConnectionPools()
       client.close()
     }
   }
