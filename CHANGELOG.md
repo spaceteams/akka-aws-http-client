@@ -1,8 +1,7 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-
+## [1.3.0]
 ### Changed
 
  - Specify the set of well known HTTP Content-Type values as AWS expects them.
