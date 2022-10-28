@@ -2,6 +2,7 @@ package de.spaceteams.aws.integration
 
 import de.spaceteams.aws.AwsClientSpec
 import org.scalatest.Assertion
+import org.scalatest.concurrent.Eventually._
 import org.testcontainers.containers.localstack.LocalStackContainer.Service.DYNAMODB
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClientBuilder
@@ -9,15 +10,19 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest
 import software.amazon.awssdk.services.dynamodb.model.DeleteTableRequest
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement
 import software.amazon.awssdk.services.dynamodb.model.KeyType
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType
+import software.amazon.awssdk.services.dynamodb.model.TableStatus
 
 import java.util.UUID
+import scala.concurrent.Await
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.jdk.FutureConverters._
 
@@ -96,6 +101,10 @@ class DynamoDBSpec
         tables <- client.listTables().asScala.map(_.tableNames().asScala)
       } yield (tables)) map { tables =>
         tables should contain(tableName)
+      } andThen { _ =>
+        client.deleteTable(
+          DeleteTableRequest.builder().tableName(tableName).build()
+        )
       }
     }
 
@@ -103,16 +112,30 @@ class DynamoDBSpec
       withTable(client) { tableName =>
         val data = UUID.randomUUID().toString()
 
-        (for {
-          _ <- client
-            .putItem(
-              PutItemRequest
-                .builder()
-                .tableName(tableName)
-                .item(Map("id" -> AttributeValue.fromS(data)).asJava)
-                .build()
+        eventually(timeout(5.seconds), interval(500.milliseconds))(
+          {
+            val table = Await.result(
+              client
+                .describeTable(
+                  DescribeTableRequest.builder().tableName(tableName).build()
+                )
+                .asScala,
+              1.second
             )
-            .asScala
+            table.table().tableStatus() shouldBe (TableStatus.ACTIVE)
+          }
+        )
+        (for {
+          _ <-
+            client
+              .putItem(
+                PutItemRequest
+                  .builder()
+                  .tableName(tableName)
+                  .item(Map("id" -> AttributeValue.fromS(data)).asJava)
+                  .build()
+              )
+              .asScala
           result <- client
             .getItem(
               GetItemRequest

@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+ - Improve correctness and resilience in tests. 
+
 ## [1.2.0]
 ### New
 

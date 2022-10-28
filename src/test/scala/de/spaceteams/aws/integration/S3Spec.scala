@@ -18,6 +18,7 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.UploadPartRequest
 
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
@@ -27,10 +28,13 @@ class S3Spec extends AwsClientSpec[S3AsyncClient, S3AsyncClientBuilder] {
   val service = S3
   def clientBuilder: S3AsyncClientBuilder = S3AsyncClient.builder()
 
+  def mkBucketName: String =
+    s"akka-aws-http-client-${UUID.randomUUID.toString()}"
+
   def withBucket(
-      client: S3AsyncClient,
-      bucketName: String = UUID.randomUUID.toString
+      client: S3AsyncClient
   )(fct: (String) => Future[Assertion]): Future[Assertion] = {
+    val bucketName = mkBucketName
     val req = CreateBucketRequest.builder().bucket(bucketName).build()
     client.createBucket(req).asScala.flatMap(_ => fct(bucketName)).andThen {
       _ =>
@@ -42,8 +46,9 @@ class S3Spec extends AwsClientSpec[S3AsyncClient, S3AsyncClientBuilder] {
   }
 
   "An S3 client" should {
+
     "create a bucket" in { client =>
-      val bucketName = "my-bucket"
+      val bucketName = mkBucketName
       val req = CreateBucketRequest.builder().bucket(bucketName).build()
       (for {
         _ <- client.createBucket(req).asScala
@@ -65,10 +70,12 @@ class S3Spec extends AwsClientSpec[S3AsyncClient, S3AsyncClientBuilder] {
               (`multipart/mixed` withBoundary ("ABC"))
                 .toString()
             )
+            .contentLength(data.getBytes(StandardCharsets.UTF_8).length)
             .build()
+        val body = AsyncRequestBody.fromString(data, StandardCharsets.UTF_8)
         (for {
           _ <- client
-            .putObject(put, AsyncRequestBody.fromString(data))
+            .putObject(put, body)
             .asScala
           get = GetObjectRequest
             .builder()
@@ -142,7 +149,7 @@ class S3Spec extends AwsClientSpec[S3AsyncClient, S3AsyncClientBuilder] {
                 .multipartUpload(
                   CompletedMultipartUpload
                     .builder()
-                    .parts(uploads.asJava)
+                    .parts(uploads.sortBy(_.partNumber()).asJava)
                     .build()
                 )
                 .build()
@@ -161,5 +168,6 @@ class S3Spec extends AwsClientSpec[S3AsyncClient, S3AsyncClientBuilder] {
         )
       }
     }
+
   }
 }
