@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+ - Specify the set of well known HTTP Content-Type values as AWS expects them.
+   This fixes issues where request signature calculated by the server do not match
+   the signature provided by the client.
+
  - Improve correctness and resilience in tests. 
 
 ## [1.2.0]

@@ -5,15 +5,17 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.HttpExt
 import akka.http.scaladsl.model.ContentType
 import akka.http.scaladsl.model.ContentTypes
+import akka.http.scaladsl.model.HttpCharset
 import akka.http.scaladsl.model.HttpEntity
 import akka.http.scaladsl.model.HttpHeader
-import akka.http.scaladsl.model.HttpHeader.ParsingResult.Ok
 import akka.http.scaladsl.model.HttpMethods
 import akka.http.scaladsl.model.HttpProtocols
 import akka.http.scaladsl.model.HttpRequest
 import akka.http.scaladsl.model.HttpResponse
+import akka.http.scaladsl.model.MediaType
 import akka.http.scaladsl.model.RequestEntityAcceptance.Expected
 import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.headers.`Content-Length`
 import akka.http.scaladsl.model.headers.`Content-Type`
 import akka.http.scaladsl.settings.ConnectionPoolSettings
@@ -59,7 +61,9 @@ class AkkaAwsHttpClient(
   ): CompletableFuture[Void] = {
     val handler = request.responseHandler()
     Try(AkkaAwsHttpClient.toAkkaRequest(request)) match {
-      case Failure(e) => CompletableFuture.failedFuture[Void](e)
+      case Failure(e) =>
+        handler.onError(e)
+        Future.failed(e).asJava.toCompletableFuture()
       case Success(akkaReq) =>
         httpRequest(akkaReq)
           .transform {
@@ -78,6 +82,55 @@ class AkkaAwsHttpClient(
 
 object AkkaAwsHttpClient {
 
+  // AWS expects these content type headers to set exactly right,
+  // as they are used in the calculation of checksums and cryptograph signatures
+  // That means they need to precise on a binary level, including precise
+  // case sensetivity and formatting / white space etc.
+  // Since HTTP does not define it as such in any standard, AKKA Http "mangels"
+  // the values as far as AWS is concerned.
+  // To mitigate this behavior, this map contains precise representations of
+  // the most known content types that AWS expects and how it expects them.
+  //
+  // This fixes issues where request signature calculated by the server do not match
+  // the signature provided by the client.
+  val knownContentTypes: Map[String, ContentType] =
+    Map(
+      "application/x-amz-json-1.0" -> ContentType(
+        MediaType
+          .customBinary("application", "x-amz-json-1.0", MediaType.Compressible)
+      ),
+      "application/x-amz-json-1.1" -> ContentType(
+        MediaType
+          .customBinary("application", "x-amz-json-1.1", MediaType.Compressible)
+      ),
+      "application/x-amz-cbor-1.1" -> ContentType(
+        MediaType
+          .customBinary("application", "x-amz-cbor-1.1", MediaType.Compressible)
+      ),
+      "application/x-www-form-urlencoded; charset-UTF-8" -> ContentType(
+        MediaType.applicationWithOpenCharset("x-www-form-urlencoded"),
+        HttpCharset.custom("utf-8")
+      ),
+      "application/x-www-form-urlencoded" -> ContentType(
+        MediaType.applicationWithOpenCharset("x-www-form-urlencoded"),
+        HttpCharset.custom("utf-8")
+      ),
+      "application/xml" -> ContentType(
+        MediaType.customBinary("application", "xml", MediaType.Compressible)
+      ),
+      "binary/octet-stream" -> ContentType(
+        MediaType.customBinary(
+          "binary",
+          "octet-stream",
+          MediaType.NotCompressible
+        )
+      ),
+      "text/plain" -> ContentType(
+        MediaType.text("plain"),
+        HttpCharset.custom("UTF-8")
+      )
+    )
+
   private[aws] def toAkkaRequest(request: AsyncExecuteRequest): HttpRequest = {
 
     val underlyingRequest = request.request()
@@ -91,44 +144,46 @@ object AkkaAwsHttpClient {
             s"Unsupported HTTP method: ${underlyingRequest.method()}"
           )
         )
+
     val headers =
-      underlyingRequest.headers().asScala.foldLeft(List.empty[HttpHeader]) {
-        (prev, header) =>
+      underlyingRequest
+        .headers()
+        .asScala
+        .foldLeft(List.empty[HttpHeader]) { (prev, header) =>
           {
             val (name, value) = header
-            HttpHeader.parse(name, value.asScala.mkString(",")) match {
-              case HttpHeader.ParsingResult.Error(error) =>
-                throw new IllegalArgumentException(
-                  s"Failure parsing HTTP header: ${name}: ${error.formatPretty}"
-                )
-              case Ok(header, _) => {
-                header :: prev
-              }
-            }
+            RawHeader(name, value.asScala.mkString(",")) :: prev
           }
-      }
-    val requestHeaders = headers.filterNot(header =>
-      Set(
-        `Content-Length`.lowercaseName, // will be reset by akka
-        `Content-Type`.lowercaseName // akka expects this header to be set on the HttpEntity
-      ).contains(header.lowercaseName)
-    )
+        }
+
+    val requestHeaders = headers
+      .filterNot(header =>
+        Set(
+          `Content-Length`.lowercaseName, // will be reset by akka
+          `Content-Type`.lowercaseName // akka expects this header to be set on the HttpEntity
+        ).contains(header.lowercaseName)
+      )
 
     val entity = httpMethod.requestEntityAcceptance match {
       case Expected => {
-        val contentType = headers
-          .find(_.is(`Content-Type`.lowercaseName))
-          .map(h =>
-            ContentType.parse(h.value()) match {
-              case Left(value) =>
-                throw new IllegalArgumentException(
-                  s"Unsupported content type value: ${h.value}. \n ${value.map(_.formatPretty).mkString("\n")}"
-                )
-              case Right(value) =>
-                value
-            }
-          )
-          .getOrElse(ContentTypes.NoContentType)
+        val contentType =
+          headers
+            .find(_.is(`Content-Type`.lowercaseName))
+            .map(h =>
+              ContentType.parse(h.value()) match {
+                case Left(value) =>
+                  throw new IllegalArgumentException(
+                    s"Unsupported content type value: ${h.value}. \n ${value.map(_.formatPretty).mkString("\n")}"
+                  )
+                case Right(value) =>
+                  val key = value.mediaType.value
+                  knownContentTypes.getOrElse(
+                    key,
+                    value
+                  )
+              }
+            )
+            .getOrElse(ContentTypes.NoContentType)
         val source = Source.fromPublisher(contentPublisher).map(ByteString(_))
         contentPublisher.contentLength.toScala match {
           case Some(length) =>
